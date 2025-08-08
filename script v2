@@ -1,0 +1,381 @@
+--// Roblox Universal Script Hub GUI (Instance.new only)
+--// Clean, modern tabbed UI with drag, close, and RightShift toggle.
+--// Safe re-run: destroys any previous instance.
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local CoreGui = game:GetService("CoreGui")
+
+local function getGuiParent()
+    -- Prefer executor-provided hierarchy isolation if available
+    local ok, uiParent = pcall(function()
+        return gethui and gethui() or CoreGui
+    end)
+    return ok and uiParent or CoreGui
+end
+
+-- Destroy previous instance if found
+local GUI_NAME = "UniversalScriptHub"
+for _, container in ipairs({getGuiParent(), CoreGui}) do
+    local old = container:FindFirstChild(GUI_NAME)
+    if old then old:Destroy() end
+end
+
+-- Colors and sizing (tweak to taste)
+local COLORS = {
+    background = Color3.fromRGB(26, 28, 34),
+    panel      = Color3.fromRGB(32, 35, 44),
+    stroke     = Color3.fromRGB(60, 65, 80),
+    titlebar   = Color3.fromRGB(38, 42, 54),
+    text       = Color3.fromRGB(235, 239, 255),
+    muted      = Color3.fromRGB(175, 182, 201),
+    accent     = Color3.fromRGB(90, 140, 255),
+    accentDark = Color3.fromRGB(70, 120, 240),
+    button     = Color3.fromRGB(46, 50, 62),
+    buttonHover= Color3.fromRGB(58, 63, 78),
+    activeTab  = Color3.fromRGB(58, 63, 92),
+}
+local RADIUS = 8
+
+-- Helpers
+local function corner(parent, r)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, r or RADIUS)
+    c.Parent = parent
+    return c
+end
+
+local function stroke(parent, thickness, color, transparency)
+    local s = Instance.new("UIStroke")
+    s.Thickness = thickness or 1
+    s.Color = color or COLORS.stroke
+    s.Transparency = transparency or 0
+    s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    s.Parent = parent
+    return s
+end
+
+local function padding(parent, l, t, r, b)
+    local p = Instance.new("UIPadding")
+    p.PaddingLeft   = UDim.new(0, l or 8)
+    p.PaddingTop    = UDim.new(0, t or 8)
+    p.PaddingRight  = UDim.new(0, r or 8)
+    p.PaddingBottom = UDim.new(0, b or 8)
+    p.Parent = parent
+    return p
+end
+
+local function vlist(parent, paddingPx, itemAlign)
+    local l = Instance.new("UIListLayout")
+    l.FillDirection = Enum.FillDirection.Vertical
+    l.HorizontalAlignment = Enum.HorizontalAlignment.Left
+    l.VerticalAlignment = itemAlign or Enum.VerticalAlignment.Top
+    l.Padding = UDim.new(0, paddingPx or 8)
+    l.SortOrder = Enum.SortOrder.LayoutOrder
+    l.Parent = parent
+    return l
+end
+
+local function hlist(parent, paddingPx, itemAlign)
+    local l = Instance.new("UIListLayout")
+    l.FillDirection = Enum.FillDirection.Horizontal
+    l.HorizontalAlignment = itemAlign or Enum.HorizontalAlignment.Left
+    l.VerticalAlignment = Enum.VerticalAlignment.Center
+    l.Padding = UDim.new(0, paddingPx or 8)
+    l.SortOrder = Enum.SortOrder.LayoutOrder
+    l.Parent = parent
+    return l
+end
+
+local function tweenColor(inst, prop, toColor, time, style, dir)
+    TweenService:Create(inst, TweenInfo.new(time or 0.15, style or Enum.EasingStyle.Quad, dir or Enum.EasingDirection.Out), {[prop] = toColor}):Play()
+end
+
+-- ScreenGui root (easy to destroy)
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = GUI_NAME
+screenGui.ResetOnSpawn = false
+screenGui.IgnoreGuiInset = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.Enabled = true
+screenGui.Parent = getGuiParent()
+
+-- Main window
+local main = Instance.new("Frame")
+main.Name = "MainWindow"
+main.Size = UDim2.new(0, 520, 0, 340)
+main.Position = UDim2.new(0.5, -260, 0.5, -170)
+main.BackgroundColor3 = COLORS.panel
+main.Parent = screenGui
+corner(main, RADIUS)
+stroke(main, 1, COLORS.stroke, 0.25)
+
+-- Title bar (draggable area)
+local titleBar = Instance.new("Frame")
+titleBar.Name = "TitleBar"
+titleBar.BackgroundColor3 = COLORS.titlebar
+titleBar.Size = UDim2.new(1, 0, 0, 40)
+titleBar.Parent = main
+corner(titleBar, RADIUS)
+stroke(titleBar, 1, COLORS.stroke, 0.4)
+
+-- Title text
+local title = Instance.new("TextLabel")
+title.Name = "Title"
+title.BackgroundTransparency = 1
+title.Text = "Universal Script Hub"
+title.Font = Enum.Font.GothamBold
+title.TextSize = 16
+title.TextColor3 = COLORS.text
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Size = UDim2.new(1, -90, 1, 0)
+title.Position = UDim2.new(0, 12, 0, 0)
+title.Parent = titleBar
+
+-- Close button
+local closeBtn = Instance.new("TextButton")
+closeBtn.Name = "Close"
+closeBtn.BackgroundColor3 = COLORS.button
+closeBtn.AutoButtonColor = false
+closeBtn.Text = "×"
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextSize = 18
+closeBtn.TextColor3 = COLORS.text
+closeBtn.Size = UDim2.new(0, 32, 0, 28)
+closeBtn.Position = UDim2.new(1, -40, 0.5, -14)
+closeBtn.Parent = titleBar
+corner(closeBtn, RADIUS - 4)
+stroke(closeBtn, 1, COLORS.stroke, 0.35)
+
+closeBtn.MouseEnter:Connect(function()
+    tweenColor(closeBtn, "BackgroundColor3", COLORS.buttonHover)
+end)
+closeBtn.MouseLeave:Connect(function()
+    tweenColor(closeBtn, "BackgroundColor3", COLORS.button)
+end)
+closeBtn.MouseButton1Click:Connect(function()
+    screenGui:Destroy()
+end)
+
+-- Window Content
+local content = Instance.new("Frame")
+content.Name = "Content"
+content.BackgroundColor3 = COLORS.panel
+content.Size = UDim2.new(1, -16, 1, -56)
+content.Position = UDim2.new(0, 8, 0, 48)
+content.Parent = main
+corner(content, RADIUS - 2)
+padding(content, 10, 10, 10, 10)
+
+-- Tabs bar
+local tabsBar = Instance.new("Frame")
+tabsBar.Name = "TabsBar"
+tabsBar.BackgroundTransparency = 1
+tabsBar.Size = UDim2.new(1, 0, 0, 34)
+tabsBar.Parent = content
+hlist(tabsBar, 8, Enum.HorizontalAlignment.Left)
+padding(tabsBar, 2, 0, 2, 0)
+
+-- Pages container
+local pages = Instance.new("Frame")
+pages.Name = "Pages"
+pages.BackgroundColor3 = COLORS.background
+pages.Size = UDim2.new(1, 0, 1, -42)
+pages.Position = UDim2.new(0, 0, 0, 42)
+pages.Parent = content
+corner(pages, RADIUS - 4)
+stroke(pages, 1, COLORS.stroke, 0.3)
+padding(pages, 12, 12, 12, 12)
+
+-- Utility: Styled Button
+local function makeButton(text, callback)
+    local btn = Instance.new("TextButton")
+    btn.AutoButtonColor = false
+    btn.Text = text
+    btn.Font = Enum.Font.Gotham
+    btn.TextSize = 14
+    btn.TextColor3 = COLORS.text
+    btn.BackgroundColor3 = COLORS.button
+    btn.Size = UDim2.new(1, 0, 0, 34)
+    btn.Parent = nil
+    corner(btn, RADIUS - 4)
+    stroke(btn, 1, COLORS.stroke, 0.35)
+
+    btn.MouseEnter:Connect(function()
+        tweenColor(btn, "BackgroundColor3", COLORS.buttonHover)
+    end)
+    btn.MouseLeave:Connect(function()
+        tweenColor(btn, "BackgroundColor3", COLORS.button)
+    end)
+    btn.MouseButton1Down:Connect(function()
+        tweenColor(btn, "BackgroundColor3", COLORS.accentDark, 0.1)
+        btn.TextColor3 = Color3.fromRGB(255,255,255)
+    end)
+    btn.MouseButton1Up:Connect(function()
+        tweenColor(btn, "BackgroundColor3", COLORS.buttonHover, 0.15)
+        btn.TextColor3 = COLORS.text
+    end)
+    btn.MouseButton1Click:Connect(function()
+        if typeof(callback) == "function" then
+            pcall(callback)
+        end
+    end)
+    return btn
+end
+
+-- Tab creation
+local Tabs = {}
+local ActiveTab = nil
+
+local function setActiveTab(name)
+    for tabName, info in pairs(Tabs) do
+        local isActive = (tabName == name)
+        info.Page.Visible = isActive
+        tweenColor(info.Button, "BackgroundColor3", isActive and COLORS.activeTab or COLORS.button, 0.15)
+        info.Button.TextColor3 = isActive and COLORS.text or COLORS.muted
+    end
+    ActiveTab = name
+end
+
+local function createTab(name)
+    -- Tab Button
+    local tabBtn = Instance.new("TextButton")
+    tabBtn.Name = name .. "Tab"
+    tabBtn.Text = name
+    tabBtn.AutoButtonColor = false
+    tabBtn.Font = Enum.Font.GothamMedium
+    tabBtn.TextSize = 14
+    tabBtn.TextColor3 = COLORS.muted
+    tabBtn.BackgroundColor3 = COLORS.button
+    tabBtn.Size = UDim2.new(0, math.max(80, name:len()*8+20), 1, 0)
+    tabBtn.Parent = tabsBar
+    corner(tabBtn, RADIUS - 4)
+    stroke(tabBtn, 1, COLORS.stroke, 0.35)
+
+    tabBtn.MouseEnter:Connect(function()
+        if ActiveTab ~= name then
+            tweenColor(tabBtn, "BackgroundColor3", COLORS.buttonHover)
+        end
+    end)
+    tabBtn.MouseLeave:Connect(function()
+        if ActiveTab ~= name then
+            tweenColor(tabBtn, "BackgroundColor3", COLORS.button)
+        end
+    end)
+
+    -- Page
+    local page = Instance.new("Frame")
+    page.Name = name .. "Page"
+    page.BackgroundTransparency = 1
+    page.Size = UDim2.new(1, 0, 1, 0)
+    page.Visible = false
+    page.Parent = pages
+    padding(page, 2, 2, 2, 2)
+    local list = vlist(page, 8)
+
+    -- Click behavior
+    tabBtn.MouseButton1Click:Connect(function()
+        setActiveTab(name)
+    end)
+
+    Tabs[name] = {
+        Button = tabBtn,
+        Page = page,
+        List = list,
+    }
+
+    return page
+end
+
+-- Create tabs
+local mainPage  = createTab("Main")
+local playerPage= createTab("Player")
+local miscPage  = createTab("Misc")
+
+-- Populate Main tab (sample buttons)
+do
+    local b1 = makeButton("Main Action 1 (print)", function()
+        print("[ScriptHub] Main Action 1 triggered")
+    end)
+    b1.Parent = mainPage
+
+    local b2 = makeButton("Main Action 2 (warn)", function()
+        warn("[ScriptHub] Main Action 2 warning")
+    end)
+    b2.Parent = mainPage
+end
+
+-- Populate Player tab (sample buttons)
+do
+    local localPlayer = Players.LocalPlayer
+
+    local b1 = makeButton("Print LocalPlayer Name", function()
+        print("[ScriptHub] LocalPlayer:", localPlayer and localPlayer.Name)
+    end)
+    b1.Parent = playerPage
+
+    local b2 = makeButton("Warn Health (if Humanoid)", function()
+        local char = localPlayer and localPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            warn(string.format("[ScriptHub] Humanoid Health: %.1f / %.1f", hum.Health, hum.MaxHealth))
+        else
+            warn("[ScriptHub] Humanoid not found.")
+        end
+    end)
+    b2.Parent = playerPage
+end
+
+-- Populate Misc tab (sample buttons)
+do
+    local b1 = makeButton("Toggle Console Message", function()
+        print("[ScriptHub] Misc toggled at", os.time())
+    end)
+    b1.Parent = miscPage
+
+    local b2 = makeButton("Friendly Warning", function()
+        warn("[ScriptHub] This is a friendly placeholder warning!")
+    end)
+    b2.Parent = miscPage
+end
+
+-- Default active tab
+setActiveTab("Main")
+
+-- Draggable window (drag via TitleBar)
+do
+    local dragging = false
+    local dragStart, startPos
+
+    local function update(input)
+        local delta = input.Position - dragStart
+        main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+
+    titleBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = main.Position
+
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            update(input)
+        end
+    end)
+end
+
+-- RightShift toggle (optional)
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.RightShift then
+        screenGui.Enable
